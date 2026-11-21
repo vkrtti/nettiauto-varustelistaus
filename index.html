@@ -42,6 +42,10 @@ a { color: inherit; }
 .cursor { display: none; }
 @media (pointer: fine) {
   body.has-cursor, body.has-cursor button, body.has-cursor .tile { cursor: none; }
+  body.has-cursor input, body.has-cursor textarea { cursor: text; }
+  body.has-cursor dialog, body.has-cursor dialog * { cursor: auto; }
+  body.has-cursor dialog button, body.has-cursor dialog select, body.has-cursor dialog a { cursor: pointer; }
+  body.has-cursor dialog input { cursor: text; }
   .cursor {
     display: flex; position: fixed; left: 0; top: 0; z-index: 100; pointer-events: none;
     align-items: center; justify-content: center; height: 12px; min-width: 12px; padding: 0;
