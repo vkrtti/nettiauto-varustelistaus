@@ -291,10 +291,43 @@ dialog[open] { animation: rise .35s var(--ease) both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
 }
+
+body:has(#pastePanel:not([hidden])) .hero h1, body:has(#pastePanel:not([hidden])) .hero p,
+body:has(.error.show) .hero h1, body:has(.error.show) .hero p { color: var(--ghost); }
+/* ---------- paste panel ---------- */
+[hidden] { display: none !important; }
+.paste-panel { width: min(420px, 88vw); display: grid; gap: 10px; animation: rise .35s var(--ease) both; }
+.paste-panel textarea {
+  width: 100%; min-height: 150px; resize: vertical; padding: 12px 14px; border: 0; background: var(--card);
+  box-shadow: 0 1px 0 var(--line), 0 20px 40px -28px rgba(17,17,19,.25); color: var(--ink);
+  font: inherit; font-size: 13.5px; line-height: 1.5;
+}
+.paste-panel textarea:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.paste-panel textarea::placeholder { color: var(--ink-3); }
+.paste-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.paste-count { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.pill:disabled { opacity: .35; cursor: default; }
+.is-loading .paste-panel, .is-loading #pasteToggle { opacity: .3; pointer-events: none; }
+
+/* ---------- "no equipment found": a calm red flash ---------- */
+.flash-layer {
+  position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0;
+  background: radial-gradient(120% 90% at 50% 35%, rgba(196,49,43,.16), rgba(196,49,43,.07) 55%, rgba(196,49,43,.02));
+}
+body.flash .flash-layer { animation: flash 1.8s ease-out; }
+@keyframes flash { 0% { opacity: 0; } 14% { opacity: 1; } 100% { opacity: 0; } }
+body.flash .hero h1 { animation: tint 1.8s ease-out; }
+@keyframes tint { 14% { color: #ecc9c6; } }
+body.flash .tile { animation: nudge .55s var(--ease); }
+@keyframes nudge { 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+.error { color: var(--ink-2); }
+.error strong { display: block; color: var(--danger); font-weight: 600; font-size: 15px; letter-spacing: -.01em; margin-bottom: 3px; }
+.error span { display: block; }
 </style>
 </head>
 <body>
 <div class="loader" aria-hidden="true"><span class="mono big">VA<br>LI</span></div>
+<div class="flash-layer" aria-hidden="true"></div>
 <div class="cursor" id="cursor" aria-hidden="true"><span id="cursorLabel"></span></div>
 
 <header>
@@ -331,11 +364,18 @@ dialog[open] { animation: rise .35s var(--ease) both; }
       </div>
       <input type="file" id="fileInput" accept="application/pdf,image/png,image/jpeg,image/webp,text/plain" hidden>
     </div>
+    <div class="error" id="error" role="alert"></div>
     <div class="extra">
       <input id="extraInfo" type="text" placeholder="Lisätiedot: 1-omistaja, huoltokirja, 2x renkaat…" autocomplete="off" aria-label="Lisätiedot auton historiasta, valinnainen">
     </div>
-    <div class="hint">tai liitä teksti suoraan <kbd>Ctrl</kbd> + <kbd>V</kbd></div>
-    <div class="error" id="error" role="alert"></div>
+    <button class="pill line" id="pasteToggle" type="button" aria-expanded="false" aria-controls="pastePanel">Liitä teksti tiedoston sijaan</button>
+    <div class="paste-panel" id="pastePanel" hidden>
+      <textarea id="pasteText" placeholder="Liitä tähän varusteluettelo, VIN-dekooderin tuloste tai muu varusteteksti" aria-label="Varusteteksti"></textarea>
+      <div class="paste-actions">
+        <span class="paste-count" id="pasteCount">0 merkkiä</span>
+        <button class="pill" id="pasteGo" type="button" disabled>Tee lista</button>
+      </div>
+    </div>
   </section>
 
   <section class="results" id="results" aria-live="polite">
@@ -509,7 +549,7 @@ You are running inside a web app, not a chat. Answer only with JSON that matches
 - `lisaa_itse`: the history facts the seller did not give, as short Finnish names (the "Lisää itse jos pätee" items). Empty when the seller gave all of them.
 - `huomautukset`: other short notes for the seller in Finnish, such as confirming the import country. Empty when none.
 - `usp`: only the USP line, `** Varuste / Varuste / ... **`, with no code block and no character count. The app counts the characters. Keep it at 200 characters or fewer.
-- `virhe`: empty, unless the input holds no vehicle equipment data. Then leave `autot` empty and explain in one Finnish sentence.
+- `virhe`: empty, unless the input holds no vehicle equipment data (for example an invoice, a CV, a recipe, an empty or unreadable page, or only a price or a registration number with no equipment). Then leave `autot` empty and write one short Finnish sentence that says what the input seems to be instead, for example "Tiedosto näyttää olevan lasku, ei auton varusteluettelo." Never invent equipment to fill the list.
 </script>
 
 <script type="module">
@@ -644,7 +684,7 @@ document.addEventListener("drop", (e) => {
   handleFile(f);
 });
 document.addEventListener("paste", (e) => {
-  if (busy || e.target === $("#extraInfo") || dlg.open) return;
+  if (busy || e.target.closest?.("input, textarea") || dlg.open) return;
   const f = e.clipboardData?.files?.[0];
   if (f) { e.preventDefault(); if (app.classList.contains("is-done")) resetView(); return handleFile(f); }
   const text = e.clipboardData?.getData("text/plain")?.trim();
@@ -670,7 +710,7 @@ async function handleFile(file) {
   if (type === "application/pdf") return run({ kind: "pdf", name: file.name, data: await readAsBase64(file) });
   if (["image/png", "image/jpeg", "image/webp", "image/gif"].includes(type)) return run({ kind: "image", name: file.name, mime: type, data: await readAsBase64(file) });
   if (type.startsWith("text/") || /\.(txt|csv)$/i.test(file.name)) return run({ kind: "text", name: file.name, text: await file.text() });
-  showError("Tätä tiedostomuotoa ei tueta. Käytä PDF:ää, kuvaa tai tekstiä.");
+  rejectInput("Tätä tiedostomuotoa ei voi lukea. Käytä PDF:ää, kuvaa tai tekstiä.");
 }
 
 /* ---------- loading UI ---------- */
@@ -697,7 +737,35 @@ function stopLoading() {
   clearInterval(timer);
   app.classList.remove("is-loading"); body.classList.remove("is-loading");
 }
-function showError(msg) { const el = $("#error"); el.textContent = msg; el.classList.add("show"); }
+function showError(msg, title) {
+  const el = $("#error");
+  el.textContent = "";
+  if (title) { const t = document.createElement("strong"); t.textContent = title; el.append(t); }
+  const m = document.createElement("span"); m.textContent = msg; el.append(m);
+  el.classList.add("show");
+}
+function rejectInput(msg) {
+  showError(msg || "Tiedostossa ei näyttänyt olevan auton varustetietoja. Kokeile tehtaan varusteluetteloa, VIN-dekooderin tulostetta tai myyntiesitettä.", "Varusteita ei havaittu");
+  body.classList.remove("flash"); void body.offsetWidth; body.classList.add("flash");
+  setTimeout(() => body.classList.remove("flash"), 1900);
+}
+
+/* ---------- paste panel ---------- */
+const pasteToggle = $("#pasteToggle"), pastePanel = $("#pastePanel"), pasteText = $("#pasteText"), pasteGo = $("#pasteGo");
+pasteToggle.addEventListener("click", () => {
+  const open = pastePanel.hidden;
+  pastePanel.hidden = !open;
+  pasteToggle.setAttribute("aria-expanded", String(open));
+  pasteToggle.textContent = open ? "Sulje tekstikenttä" : "Liitä teksti tiedoston sijaan";
+  if (open) pasteText.focus();
+});
+pasteText.addEventListener("input", () => {
+  const n = pasteText.value.trim().length;
+  $("#pasteCount").textContent = n + " merkkiä";
+  pasteGo.disabled = n < 20;
+});
+pasteGo.addEventListener("click", () => { if (busy) return; run({ kind: "text", name: "Liitetty teksti", text: pasteText.value.trim() }); });
+pasteText.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !pasteGo.disabled) pasteGo.click(); });
 function hideError() { $("#error").classList.remove("show"); }
 
 /* ---------- Claude call ---------- */
@@ -755,9 +823,10 @@ async function run(input) {
   try {
     const data = await callClaude(input);
     setStep("done");
-    if (!data.autot?.length) { stopLoading(); return showError(data.virhe || "Aineistosta ei löytynyt varustetietoja."); }
+    const found = (data.autot || []).filter((c) => Array.isArray(c?.varusteet) && c.varusteet.length);
+    if (!found.length) { stopLoading(); return rejectInput(data.virhe); }
     await new Promise((r) => setTimeout(r, 450));
-    showResults(data.autot);
+    showResults(found);
   } catch (err) {
     stopLoading();
     showError(friendlyError(err));
@@ -887,6 +956,7 @@ function resetView() {
   cars = [];
   $("#grid").innerHTML = "";
   $("#extraInfo").value = "";
+  pasteText.value = ""; pasteText.dispatchEvent(new Event("input"));
 }
 $("#resetBtn").addEventListener("click", () => withTransition(resetView));
 </script>
