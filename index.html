@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Varustelistaaja</title>
+<meta name="description" content="Pudota auton varuste-PDF, saat Nettiauto-varustelistan ja myyntiväittämän valmiina kopioitavaksi.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23f5f5f3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f5f3;
+  --ink: #111113;
+  --ink-2: #55555c;
+  --ink-3: #9b9ba1;
+  --ghost: #e4e4e0;
+  --line: #e3e3df;
+  --card: #ffffff;
+  --dark: #111113;
+  --dark-2: #1c1c20;
+  --on-dark: #f5f5f3;
+  --on-dark-2: #8d8d95;
+  --ok: #1f9d5c;
+  --warn: #b86a00;
+  --danger: #c4312b;
+  --ease: cubic-bezier(.2,.8,.2,1);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  min-height: 100vh; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 "Inter Tight", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+a { color: inherit; }
+
+/* ---------- custom dot cursor (fine pointers only) ---------- */
+.cursor { display: none; }
+@media (pointer: fine) {
+  body.has-cursor, body.has-cursor button, body.has-cursor .tile { cursor: none; }
+  .cursor {
+    display: flex; position: fixed; left: 0; top: 0; z-index: 100; pointer-events: none;
+    align-items: center; justify-content: center; height: 12px; min-width: 12px; padding: 0;
+    border-radius: 999px; background: var(--ink); color: var(--bg);
+    font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden;
+    transform: translate(-50%, -50%);
+    transition: height .3s var(--ease), min-width .3s var(--ease), padding .3s var(--ease), background .2s, opacity .2s;
+  }
+  .cursor span { opacity: 0; transition: opacity .15s; }
+  .cursor.is-label { height: 30px; min-width: 30px; padding: 0 14px; }
+  .cursor.is-label span { opacity: 1; transition-delay: .1s; }
+  .cursor.is-small { height: 6px; min-width: 6px; }
+  .cursor.on-dark { background: var(--on-dark); color: var(--ink); }
+  .cursor.is-hidden { opacity: 0; }
+}
+
+/* ---------- intro loader ---------- */
+.loader {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--bg);
+  animation: loader-out .6s var(--ease) 1s forwards;
+}
+.mono { display: block; font-weight: 700; font-size: 15px; line-height: .86; letter-spacing: -.02em; text-decoration: none; transform: scaleX(1.25); transform-origin: left; }
+.mono.big { font-size: 64px; transform-origin: center; }
+.loader .mono { animation: mark-in .9s var(--ease) both; }
+@keyframes mark-in { from { opacity: 0; transform: scaleX(1.25) scale(.9); filter: blur(6px); } }
+@keyframes loader-out { to { opacity: 0; visibility: hidden; } }
+
+/* ---------- header ---------- */
+header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  display: flex; align-items: flex-start; justify-content: space-between; padding: 18px 24px;
+}
+.mark { display: block; color: var(--ink); }
+nav { display: flex; gap: 22px; font-size: 13px; color: var(--ink-3); }
+nav button { position: relative; transition: color .2s; display: inline-flex; align-items: center; gap: 7px; }
+nav button:hover { color: var(--ink); }
+nav .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
+nav .dot.ok { background: var(--ok); }
+
+/* ---------- hero (fixed, bottom-left) ---------- */
+.hero {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 0; pointer-events: none;
+  display: flex; align-items: flex-end; gap: clamp(16px, 4vw, 64px); padding: 0 24px 18px;
+}
+.hero h1 {
+  margin: 0; font-weight: 600; font-size: clamp(58px, 12.5vw, 210px); line-height: .8; letter-spacing: -.065em;
+  color: var(--ink); transition: color .8s var(--ease);
+}
+.hero h1 span { display: block; animation: rise-big 1s var(--ease) both; }
+.hero h1 span:nth-child(1) { animation-delay: 1.15s; }
+.hero h1 span:nth-child(2) { animation-delay: 1.25s; }
+@keyframes rise-big { from { opacity: 0; transform: translateY(40%); } }
+.hero p {
+  margin: 0 0 6px; max-width: 250px; font-size: 13px; line-height: 1.4; font-weight: 500; color: var(--ink);
+  transition: color .8s var(--ease); animation: fade 1s ease 1.5s both;
+}
+@keyframes fade { from { opacity: 0; } }
+.is-loading .hero h1, .is-done .hero h1 { color: var(--ghost); }
+.is-loading .hero p, .is-done .hero p { color: var(--ghost); }
+@media (max-width: 640px) {
+  .hero { flex-direction: column; align-items: flex-start; gap: 12px; padding-bottom: 16px; }
+  .hero p { order: -1; max-width: 300px; }
+}
+
+/* ---------- stage ---------- */
+main { position: relative; z-index: 1; min-height: 100vh; padding: 88px 24px 40vh; }
+.stage {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  padding-top: max(4vh, 0px); animation: fade .9s ease 1.4s both;
+}
+.is-done .stage { display: none; }
+
+.tile {
+  view-transition-name: panel;
+  position: relative; width: min(320px, 78vw); aspect-ratio: 1; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: space-between; padding: 18px;
+  background: var(--card); box-shadow: 0 1px 0 var(--line), 0 30px 60px -30px rgba(17,17,19,.25);
+  transition: transform .5s var(--ease), background .5s var(--ease), color .5s var(--ease), box-shadow .5s var(--ease);
+}
+.tile:hover { transform: translateY(-4px); }
+.tile:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.tile.is-over { transform: scale(1.04) rotate(-1.5deg); box-shadow: 0 1px 0 var(--line), 0 40px 80px -30px rgba(17,17,19,.4); }
+.tile-top { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.tile-center { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.sheet {
+  width: 34%; aspect-ratio: .78; background: var(--bg); position: relative; overflow: hidden;
+  padding: 12% 11%; display: flex; flex-direction: column; gap: 9%;
+  box-shadow: 0 1px 0 var(--line), 0 18px 30px -18px rgba(17,17,19,.35);
+  transform: rotate(-8deg); transition: transform .6s var(--ease), background .5s;
+}
+.sheet i { display: block; height: 4px; background: var(--line); transition: background .5s; }
+.sheet i:nth-child(1) { width: 55%; background: var(--ink); }
+.sheet i:nth-child(3) { width: 75%; } .sheet i:nth-child(5) { width: 62%; } .sheet i:nth-child(6) { width: 40%; }
+.tile:hover .sheet { transform: rotate(-3deg) translateY(-4px); }
+.tile.is-over .sheet { transform: rotate(4deg) translateY(-10px) scale(1.06); }
+.tile-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; position: relative; }
+.tile-title { font-weight: 600; font-size: 20px; letter-spacing: -.03em; line-height: 1.05; }
+.tile-title small { display: block; font-weight: 500; font-size: 12px; letter-spacing: 0; color: var(--ink-3); margin-top: 6px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 13px; border-radius: 999px;
+  background: var(--ink); color: var(--bg); font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  transition: transform .2s var(--ease), background .2s, color .2s;
+}
+.pill:active { transform: scale(.95); }
+.pill.light { background: var(--bg); color: var(--ink); }
+.pill.line { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* loading: tile turns dark and scans */
+.is-loading .tile { background: var(--dark); color: var(--on-dark); transform: none; cursor: default; }
+.is-loading .tile-top { color: var(--on-dark-2); }
+.is-loading .sheet { background: var(--dark-2); transform: rotate(0) scale(1.05); box-shadow: none; }
+.is-loading .sheet i { background: #2e2e34; }
+.is-loading .sheet i:nth-child(1) { background: var(--on-dark); }
+.sheet::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 40%; top: -40%; opacity: 0;
+  background: linear-gradient(to bottom, transparent, rgba(245,245,243,.22)); border-bottom: 1.5px solid var(--on-dark);
+}
+.is-loading .sheet::after { opacity: 1; animation: scan 1.5s cubic-bezier(.5,0,.5,1) infinite; }
+@keyframes scan { to { top: 100%; } }
+.idle-only, .load-only { transition: opacity .3s; }
+.tile .load-only { display: none; }
+.is-loading .tile .idle-only { display: none; }
+.is-loading .tile .load-only { display: block; }
+.is-loading .tile .steps.load-only { display: grid; }
+.steps { list-style: none; margin: 0; padding: 0; font-size: 12.5px; color: var(--on-dark-2); display: grid; gap: 3px; }
+.steps li { display: flex; align-items: center; gap: 8px; transition: color .3s; }
+.steps li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .5; transition: all .3s; }
+.steps li.active { color: var(--on-dark); }
+.steps li.active::before { opacity: 1; animation: blink 1s ease-in-out infinite; }
+.steps li.done { color: var(--on-dark-2); text-decoration: line-through; text-decoration-color: rgba(141,141,149,.5); }
+.steps li.done::before { background: var(--ok); opacity: 1; }
+@keyframes blink { 50% { opacity: .2; } }
+.file-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.extra { width: min(320px, 78vw); }
+.extra input {
+  width: 100%; height: 38px; padding: 0 2px; border: 0; border-bottom: 1px solid var(--line); background: transparent;
+  color: var(--ink); font: inherit; font-size: 13.5px; transition: border-color .2s;
+}
+.extra input::placeholder { color: var(--ink-3); }
+.extra input:focus { outline: none; border-bottom-color: var(--ink); }
+.is-loading .extra { opacity: .3; pointer-events: none; }
+.hint { font-size: 12px; color: var(--ink-3); text-align: center; }
+.hint kbd { font: inherit; font-weight: 600; color: var(--ink-2); }
+.is-loading .hint { visibility: hidden; }
+
+.error {
+  display: none; width: min(420px, 88vw); padding: 12px 16px; background: var(--card); color: var(--danger);
+  font-size: 13.5px; font-weight: 500; box-shadow: inset 3px 0 0 var(--danger), 0 1px 0 var(--line);
+}
+.error.show { display: block; animation: rise .4s var(--ease) both; }
+
+/* ---------- results ---------- */
+.results { display: none; max-width: 1180px; margin: 0 auto; }
+.is-done .results { display: block; }
+.results-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 8px 0 22px; }
+.car-name {
+  margin: 0; font-weight: 600; font-size: clamp(30px, 4.6vw, 60px); line-height: .95; letter-spacing: -.05em;
+  animation: rise .7s var(--ease) both .1s;
+}
+.bar-actions { display: flex; gap: 8px; flex-wrap: wrap; animation: fade .6s ease .3s both; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.tabs:empty { display: none; }
+.tab { height: 30px; padding: 0 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--bg); box-shadow: none; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+.side { display: grid; gap: 20px; }
+.card { background: var(--card); box-shadow: 0 1px 0 var(--line), 0 30px 60px -36px rgba(17,17,19,.22); }
+.card.list-card { view-transition-name: panel; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 14px 22px; }
+.card-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); }
+.card-title b { color: var(--ink); font-weight: 600; margin-left: 6px; }
+
+.items { list-style: none; margin: 0; padding: 0 0 12px; counter-reset: n; }
+.items li {
+  counter-increment: n; display: grid; grid-template-columns: 30px 1fr; gap: 8px; align-items: baseline;
+  padding: 8px 22px; font-size: 15px; letter-spacing: -.005em; border-top: 1px solid #f0f0ed;
+  animation: rise .5s var(--ease) both; animation-delay: calc(var(--i) * 25ms + 300ms);
+}
+.items li::before { content: counter(n, decimal-leading-zero); font-size: 11px; font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.items li:hover { background: #fafaf8; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+
+.usp-card { background: var(--dark); color: var(--on-dark); animation: slide-in .8s var(--ease) both .2s; }
+.usp-card .card-title { color: var(--on-dark-2); }
+.usp-text { padding: 4px 22px 0; font-size: clamp(18px, 1.9vw, 22px); line-height: 1.32; font-weight: 500; letter-spacing: -.02em; word-break: break-word; }
+.meter { padding: 22px 22px 20px; }
+.meter-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--on-dark-2); margin-bottom: 8px; }
+.meter-row b { color: var(--on-dark); font-weight: 600; font-variant-numeric: tabular-nums; }
+.meter-track { height: 2px; background: #2e2e34; }
+.meter-fill { height: 100%; width: 0; background: var(--on-dark); transition: width 1.2s var(--ease) .7s; }
+.meter-fill.low { background: #f0ac4b; }
+
+.notes-card { animation: slide-in .8s var(--ease) both .35s; }
+@keyframes slide-in { from { opacity: 0; transform: translate(-30px, 10px) scale(.97); } }
+@media (max-width: 860px) { @keyframes slide-in { from { opacity: 0; transform: translateY(20px); } } }
+.notes { padding: 0 22px 20px; display: grid; gap: 16px; }
+.note h3 { margin: 0 0 6px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); }
+.note p { margin: 4px 0 0; font-size: 13.5px; color: var(--ink-2); }
+.note ul { margin: 0; padding-left: 16px; font-size: 13.5px; color: var(--ink-2); }
+.note li + li { margin-top: 2px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.yes { background: #e4f4ea; color: var(--ok); }
+.badge.no { background: #fbf0df; color: var(--warn); }
+.badge.unk { box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); }
+
+/* copy pill state */
+.pill .ic-check { display: none; }
+.pill.copied .ic-copy { display: none; }
+.pill.copied .ic-check { display: inline; animation: pop .35s cubic-bezier(.2,.9,.3,1.5); }
+.pill.copied { background: var(--ok); color: #fff; }
+@keyframes pop { from { transform: scale(.3); } }
+
+/* ---------- settings dialog ---------- */
+dialog {
+  width: min(440px, calc(100vw - 32px)); padding: 0; border: 0; background: var(--card); color: var(--ink);
+  box-shadow: 0 40px 100px -30px rgba(17,17,19,.45);
+}
+dialog::backdrop { background: rgba(245,245,243,.7); backdrop-filter: blur(6px); }
+dialog[open] { animation: rise .35s var(--ease) both; }
+.dlg { padding: 24px; display: grid; gap: 18px; }
+.dlg h2 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -.05em; line-height: 1; }
+.dlg p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.field label { display: block; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); margin-bottom: 4px; }
+.field input, .field select {
+  width: 100%; height: 40px; padding: 0 2px; border: 0; border-bottom: 1px solid var(--line); background: transparent;
+  color: var(--ink); font: inherit; font-size: 14.5px; border-radius: 0;
+}
+.field input:focus, .field select:focus { outline: none; border-bottom-color: var(--ink); }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+::view-transition-group(panel) { animation-duration: .7s; animation-timing-function: var(--ease); }
+::view-transition-old(panel), ::view-transition-new(panel) { height: 100%; width: 100%; object-fit: cover; object-position: top left; }
+
+@media (max-width: 640px) {
+  header { padding: 14px 16px; }
+  main { padding: 72px 16px 46vh; }
+  .hero { padding: 0 16px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="loader" aria-hidden="true"><span class="mono big">VA<br>LI</span></div>
+<div class="cursor" id="cursor" aria-hidden="true"><span id="cursorLabel"></span></div>
+
+<header>
+  <a class="mark mono" href="./" aria-label="Varustelistaaja, etusivu">VA<br>LI</a>
+  <nav>
+    <button type="button" id="modelBtn">Opus 5.5</button>
+    <button type="button" id="settingsBtn"><span class="dot" id="keyDot"></span><span id="keyLabel">API-avain</span></button>
+  </nav>
+</header>
+
+<div class="hero" aria-hidden="true">
+  <h1><span>varuste</span><span>listaaja</span></h1>
+  <p>Pudota tehtaan varusteluettelo PDF:nä. Saat Nettiauto-varustelistan, Suomi-auto-tarkistuksen ja myyntiväittämän valmiina kopioitavaksi.</p>
+</div>
+
+<main id="app">
+  <section class="stage">
+    <div class="tile" id="dropzone" role="button" tabindex="0" aria-label="Valitse tai pudota varuste-PDF">
+      <div class="tile-top">
+        <span class="idle-only">PDF · kuva · teksti</span>
+        <span class="load-only file-name" id="fileName">tiedosto.pdf</span>
+        <span class="idle-only">01</span>
+        <span class="load-only" id="elapsed">0 s</span>
+      </div>
+      <div class="tile-center"><div class="sheet"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="tile-bottom">
+        <div class="idle-only tile-title">Pudota PDF<small>tai klikkaa ja valitse</small></div>
+        <span class="idle-only pill">Valitse</span>
+        <ol class="load-only steps" id="steps" aria-live="polite">
+          <li data-step="read">Luetaan varustetiedot</li>
+          <li data-step="think">Tunnistetaan varusteet</li>
+          <li data-step="write">Kootaan lista ja USP</li>
+        </ol>
+      </div>
+      <input type="file" id="fileInput" accept="application/pdf,image/png,image/jpeg,image/webp,text/plain" hidden>
+    </div>
+    <div class="extra">
+      <input id="extraInfo" type="text" placeholder="Lisätiedot: 1-omistaja, huoltokirja, 2x renkaat…" autocomplete="off" aria-label="Lisätiedot auton historiasta, valinnainen">
+    </div>
+    <div class="hint">tai liitä teksti suoraan <kbd>Ctrl</kbd> + <kbd>V</kbd></div>
+    <div class="error" id="error" role="alert"></div>
+  </section>
+
+  <section class="results" id="results" aria-live="polite">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div class="results-bar">
+      <h2 class="car-name" id="carName"></h2>
+      <div class="bar-actions">
+        <button class="pill line" id="copyAllBtn" type="button">Kopioi kaikki</button>
+        <button class="pill" id="resetBtn" type="button">Uusi auto</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog" class="dlg" id="settingsForm">
+    <h2>asetukset</h2>
+    <p>Sivu käyttää omaa Anthropic API -avaintasi. Avain tallentuu vain tähän selaimeen, ja se lähetetään ainoastaan Anthropicille. Avaimen saa osoitteesta <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+    <div class="field">
+      <label for="apiKey">API-avain</label>
+      <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="model">Malli</label>
+      <select id="model">
+        <option value="claude-opus-5-5">Claude Opus 5.5, tarkin</option>
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5, halvempi ja nopeampi</option>
+      </select>
+    </div>
+    <div class="dlg-actions">
+      <button class="pill line" value="cancel" type="submit" formnovalidate>Peruuta</button>
+      <button class="pill" value="save" type="submit">Tallenna</button>
+    </div>
+  </form>
+</dialog>
+
+<template id="copyIcons">
+  <svg class="ic-copy" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+  <svg class="ic-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17 19 7"/></svg>
+</template>
+
+<script type="text/plain" id="systemPrompt">
+# Nettiauto equipment list
+
+The seller sells new and used cars and pastes raw equipment data (factory option lists, German or English spec sheets, VIN decoder output). Turn it into a clean Finnish equipment list they can paste into a listing.
+
+## Steps
+
+1. Read the equipment data. If several vehicles are pasted, handle each one separately under its own heading.
+2. Match each item to the standard Nettiauto categories below. Use the exact Nettiauto wording for those items.
+3. Write the items with no Nettiauto category in the terms Finnish dealers use (see "Wording").
+4. Sort the whole list by buyer value (see "Order"). Do not sort by the category list.
+5. Write in Finnish. Translate German and English option names into the terms Finnish buyers use.
+6. Check whether it is a Suomi-auto (see "Suomi-auto" below).
+7. After the list, name the facts the data cannot show (see "What the data cannot show").
+8. Always end with the USP line (see "Myyntiväittämä (USP)" below).
+
+## Format
+
+- One flat list, no category headings. The seller does not want the equipment split into groups.
+- Short bullet points, one item per line.
+- No sales language, no adjectives, no intro or closing sentence.
+- 20 to 40 items in total for a normal listing. Drop trivial items (floor mats, warning triangle) before dropping real features.
+
+## Order
+
+Large Finnish dealers (Wetteri, Kamux, K-Auto, Veho, Bilar, Rinta-Jouppi) put the items a buyer decides on at the top and the basic safety items at the bottom. Follow the same order:
+
+1. History and status, only when the seller gave them (see "What the data cannot show").
+2. Winter and heating: fuel-operated or parking heater, engine block heater with interior socket, heated windscreen, heated steering wheel, heated seats.
+3. Driving aids: adaptive cruise control, lane assist, blind spot, emergency braking, reversing camera, parking sensors, digital instrument cluster.
+4. Practical items: tow hook, powered tailgate, keyless entry and start, roof rails, folding rear seats.
+5. Lights: matrix or LED headlights, adaptive or cornering lights, LED rear lights.
+6. Seats, upholstery and climate: seat type, electric seat adjustment, upholstery, climate control, ambient lighting.
+7. Infotainment: navigation, Apple CarPlay and Android Auto, Bluetooth, USB, remote app.
+8. Basic and standard items last: ABS, ESP, traction control, airbags, Isofix, immobiliser, power steering, power windows, trip computer, tyre pressure monitor.
+
+## Wording
+
+- Put the Nettiauto term first and the detail after it: "Polttoainetoiminen lisälämmitin kaukosäätimellä ja ajastimella", "Vetokoukku, sähköisesti irrotettava", "Vetokoukku, puskurin alle taittuva", "Ilmastointi automaattinen, 3-vyöhykkeinen", "Pysäköintitutka edessä ja takana".
+- When the data gives the manufacturer's feature name, add it in parentheses after the Finnish term. Buyers search for these names. Examples: "Mukautuva vakionopeudensäädin (ACC)", "Hätäjarrutusavustin (Front Assist)", "Katveavustin (BLIS)", "Avaimeton keskuslukitus ja käynnistys (Keyless / Kessy / KeyFree)", "LED-matriisiajovalot (IQ.Light)", "Etäohjaussovellus (Volvo On Call / Car-Net / FordPass)", "Ajoprofiilin valinta (Driving Mode Selection)".
+- Merge closely related items into one line: "Lohkolämmitin ja sisätilanpistoke", "Sadetunnistin ja valoanturi", "Sähköpeilit, lämmitettävät ja himmentyvät".
+- Name the upholstery exactly: Nahka, Nahka/Alcantara, Puolinahka, Kangas.
+- Write "Webasto" only when the data names Webasto. Otherwise use the generic term.
+- Use the full Finnish terms in the list. Keep the short dealer slang for the USP.
+
+## What the data cannot show
+
+Factory option lists and VIN decoders never show the car's history. Dealers put these facts at the very top of the description, so they matter:
+
+- Number of owners (1-omistaja)
+- Service book type and last service (merkkiliikkeen huoltokirja, viimeisin huolto km and date)
+- Timing belt or chain status (jakohihna vaihdettu)
+- Second set of tyres and studs (kahdet renkaat vanteineen, talvirenkaat nastoilla)
+- Number of keys (2x avaimet)
+- ALV-vähennyskelpoinen
+- Inspection validity (katsastus voimassa)
+- Battery SOH for EV and PHEV
+
+Never guess these. When the seller gave any of them, put them at the top of the list in the order above. When they gave none, add one line after the list: "Lisää itse jos pätee:" and name the items.
+
+## EV and PHEV
+
+List the charging items the data shows, because dealers always list them:
+
+- Charging socket type ("Hybridiauton plug-in latauspistoke, Type 2")
+- Each charging cable as its own line: "Latauskaapeli kotipistorasiaan (Mode 2)", "Latauskaapeli Type 2 (Mode 3)"
+- Battery or cabin preheating, heat pump, remote climate through the app
+
+## Accuracy
+
+- Mark a category as present only when the data shows it. Never assume a feature from trim level or model year.
+- Leave the factory wheels out completely, in the list and in the USP: no "Kevytmetallivanteet", no rim size, no rim model name (for example "London 7J x 17"). Owners often change wheels, so the factory data no longer shows what is on the car. Add wheels only when the seller tells what the car has now.
+- When one item decides between two categories (for example adaptive or conventional cruise control, 360-degree or rear camera, seats with or without memory), pick only the one the data supports. If the data does not settle it, say which item is unclear in one line after the list.
+- For a question like "does this car have X", check a source before answering. State how certain the answer is. The seller knows the cars well and corrects overconfident answers.
+
+## Suomi-auto
+
+Decide from the equipment data whether the car was built for the Finnish market:
+
+- **Suomi-auto** when the data names Finland as the sales or delivery country (myyntimaa), or Finnish as the language of the navigation, infotainment system, owner's manual or labels (for example "Autokansio suomeksi", Finnish navigation language, a type approval or country equipment set for Finland).
+- **Not a Suomi-auto** when those same items name another country or language (for example a Swedish owner's manual, a Swedish type approval or a Swedish equipment package). Name the codes that showed it.
+- **Unclear** when the data names no country or language. Say so and leave Suomi-auto out.
+
+Say the result in one line before the list, with the codes it rests on.
+
+When the car is not a Suomi-auto, suggest the line "Tuontiauto (maa)" at the top of the list, for example "Tuontiauto (Ruotsi)". Large dealers state the import country openly. Tell the seller to confirm it, because the codes show the market the car was built for, not the import itself.
+
+## Myyntiväittämä (USP)
+
+The dealer system has a field "Ainutlaatuinen myyntiväittämä (USP)" with a 200-character limit. Give one line, ready to paste, in a code block:
+
+`** Varuste / Varuste / Varuste / ... **`
+
+- Start with "Suomi-auto" when the check above says it is one.
+- Then add at most two history items, only when the seller gave them: 1-om., Merkkihuollettu, Juuri huollettu, 2x renkaat.
+- Then pick the 7 to 12 pieces of equipment a Finnish buyer values most: for example parking or engine heater, adaptive cruise control, tow hook, reversing camera, LED or matrix lights, heated seats or steering wheel, keyless, powered tailgate.
+- Use the short terms dealers use in Nettiauto titles and taglines, not the full list wording. Short terms fit more items into 200 characters. Accepted terms:
+  - Heating: Pa-lämmitin, Pa-lämmitin kaukosäätimellä, Webasto (only when the data names it), Lohko+sisäp., Läm. tuulilasi, Läm. ratti, Läm. penkit
+  - Driving aids: Adapt. vakkari or ACC, Vakkari, Kaistavahti, BLIS, P.kamera, 360-kamera, P.tutkat, Digimittaristo, HUD
+  - Practical: Koukku, Taittokoukku, Sähkökoukku, Sähkökontti, Keyless (VW: Kessy), Kattokaiteet
+  - Lights: LED-valot, Matrix-LED (VW: IQ.Light)
+  - Interior: Sporttipenkit, ErgoComfort, Sähköpenkit, Muistipenkit, Nahat, Puolinahat, Alcantara-nahat, Panorama, 3-v. ilmastointi
+  - Infotainment: Navi, Carplay, Android Auto, VOC (Volvo On Call)
+- Aim for 150 to 200 characters. A USP under 120 characters wastes the field.
+- Leave out anything the listing title or the listing's own fields already show: fuel or drivetrain type (plug-in hybrid, electric, diesel), gearbox (DSG, automatic), power, 4WD when it is in the model name, model or trim name (GTE, R-Line). Those are not selling equipment and they repeat what the buyer already sees.
+- Most valuable first. Short Finnish names, separated by ` / `, wrapped in `** ... **` with a space inside each pair of asterisks.
+- Count the characters with code before giving it, asterisks and spaces included. It must be 200 or fewer. State the count in one line under it.
+- Only features the data shows. No adjectives, no prices.
+
+When the seller asks only for a USP, give just the USP line and its character count.
+
+## Huutokaupat.com variant
+
+When the listing is for Huutokaupat.com, give only the description field content: technical specifications first, then equipment. No pricing commentary.
+
+## Standard Nettiauto categories
+
+Ajotietokone, Avaimeton käynnistys, Ilmastoidut istuimet, Kaadettavat takaistuimet, Keskuslukitus avaimella, Keskuslukitus avaimeton, Keskuslukitus kaukosäätöinen, Lämmitettävä ohjauspyörä, Läpilastausmahdollisuus, Nahkaverhoilu, Navigointijärjestelmä, Ohjaustehostin, Lämmitettävät etuistuimet, Rengaspainevaroitin, Sisätilanpistoke, Start-stop-järjestelmä, Sähkökäyttöiset ikkunat, Sähkösäätöiset istuimet ilman muistia, Sähkösäätöiset istuimet muistilla, Tavaratilan turvaverkko, Urheiluistuimet, Audio-liitäntä, Bluetooth, Head Up-näyttö, Matkapuhelinvarustus, USB, Älypuhelimen liittäminen, Äänentoistojärjestelmä, Adaptiiviset ajovalot, Ajonvakautusjärjestelmä, Hätäjarrutusavustin, Isofix-kiinnikkeet, Kaarrevalot, Kaistavahti, Katveavustin, Käynnistyksenesto, Luistonesto, Lukkiutumattomat jarrut (ABS), Mäkilähtöavustin, Nopeusrajoitus-tunnistin, Peruutuskamera 360-asteen, Peruutuskamera takana, Pysäköintiavustin, Pysäköintitutka edessä ja takana, Sadetunnistin, Sumuvalot, Turvatyynyt, Törmäysvaroitin, Vakionopeudensäädin mukautuva, Vakionopeudensäädin perinteinen, Varashälytin, LED-ajovalot, Xenon-ajovalot, Katon avausmekanismi manuaalinen, Katon avausmekanismi sähköinen, Kattokaiteet, Kattoluukku ilman panoraamaa, Kattoluukku panoraama, Lasikatto, Lämmitettävä tuulilasi, Sähköpeilit, Sähkötoiminen takaluukku, Vetokoukku, Akun esilämmitys, Ilmastointi automaattinen, Ilmastointi manuaalinen, Lohkolämmitin, Polttoainetoiminen lisälämmitin, Kahdet renkaat, Kevytmetallivanteet, Alustasarja, Huoltokirja paperinen, Huoltokirja sähköinen, Hybridiauton plug-in latauspistoke, Ilmajouset, Invalidivarustus, Monitoimiohjauspyörä, Tavaratilan lämmönsäätölaite, Turbo, Urheilullinen alusta
+
+## Output in this app
+
+You are running inside a web app, not a chat. Answer only with JSON that matches the schema. The app shows the fields in separate boxes, so put each part in its own field:
+
+- `autot`: one entry per vehicle in the data.
+- `nimi`: make, model and model year as the data shows them, short (for example "Volkswagen Passat Variant GTE 2021").
+- `suomi_auto.tila` and `suomi_auto.perustelu`: the Suomi-auto result, and one Finnish sentence naming the codes it rests on.
+- `varusteet`: the equipment list in the final order, one item per string, no bullet characters. Put "Tuontiauto (maa)" first when the check suggests it, and the history items the seller gave before the equipment.
+- `epaselvat`: one Finnish line for each item the data does not settle. Empty when none.
+- `lisaa_itse`: the history facts the seller did not give, as short Finnish names (the "Lisää itse jos pätee" items). Empty when the seller gave all of them.
+- `huomautukset`: other short notes for the seller in Finnish, such as confirming the import country. Empty when none.
+- `usp`: only the USP line, `** Varuste / Varuste / ... **`, with no code block and no character count. The app counts the characters. Keep it at 200 characters or fewer.
+- `virhe`: empty, unless the input holds no vehicle equipment data. Then leave `autot` empty and explain in one Finnish sentence.
+</script>
+
+<script type="module">
+import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.5.0/+esm";
+
+const $ = (s) => document.querySelector(s);
+const app = $("#app");
+const body = document.body;
+const SYSTEM = $("#systemPrompt").textContent.trim();
+const USP_MAX = 200;
+const MODELS = { "claude-opus-5-5": "Opus 5.5", "claude-sonnet-5-5": "Sonnet 5.5" };
+
+const SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["autot", "virhe"],
+  properties: {
+    virhe: { type: "string" },
+    autot: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["nimi", "suomi_auto", "varusteet", "epaselvat", "lisaa_itse", "huomautukset", "usp"],
+        properties: {
+          nimi: { type: "string" },
+          suomi_auto: {
+            type: "object",
+            additionalProperties: false,
+            required: ["tila", "perustelu"],
+            properties: {
+              tila: { type: "string", enum: ["Suomi-auto", "Ei Suomi-auto", "Epäselvä"] },
+              perustelu: { type: "string" },
+            },
+          },
+          varusteet: { type: "array", items: { type: "string" } },
+          epaselvat: { type: "array", items: { type: "string" } },
+          lisaa_itse: { type: "array", items: { type: "string" } },
+          huomautukset: { type: "array", items: { type: "string" } },
+          usp: { type: "string" },
+        },
+      },
+    },
+  },
+};
+
+/* ---------- storage (private windows can throw) ---------- */
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+const settings = {
+  get key() { return store.get("va_key"); },
+  get model() { const m = store.get("va_model"); return MODELS[m] ? m : "claude-opus-5-5"; },
+};
+function renderKeyState() {
+  const has = !!settings.key;
+  $("#keyDot").classList.toggle("ok", has);
+  $("#keyLabel").textContent = has ? "Asetukset" : "Lisää API-avain";
+  $("#modelBtn").textContent = MODELS[settings.model];
+}
+renderKeyState();
+
+/* ---------- dot cursor ---------- */
+const cursor = $("#cursor"), cursorLabel = $("#cursorLabel");
+if (matchMedia("(pointer: fine)").matches && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  body.classList.add("has-cursor");
+  let x = -100, y = -100, cx = -100, cy = -100;
+  addEventListener("pointermove", (e) => { x = e.clientX; y = e.clientY; updateCursor(e.target); });
+  document.addEventListener("pointerleave", () => cursor.classList.add("is-hidden"));
+  document.addEventListener("pointerenter", () => cursor.classList.remove("is-hidden"));
+  (function loop() {
+    cx += (x - cx) * 0.22; cy += (y - cy) * 0.22;
+    cursor.style.left = cx + "px"; cursor.style.top = cy + "px";
+    requestAnimationFrame(loop);
+  })();
+}
+function updateCursor(t) {
+  if (!body.classList.contains("has-cursor")) return;
+  const tile = t.closest?.(".tile");
+  const btn = t.closest?.("button, a, select");
+  const field = t.closest?.("input, textarea");
+  const dark = t.closest?.(".usp-card, .is-loading .tile");
+  let label = "";
+  if (tile && !busy) label = dz.classList.contains("is-over") ? "Pudota" : "Valitse";
+  else if (tile && busy) label = "Odota";
+  cursorLabel.textContent = label;
+  cursor.classList.toggle("is-label", !!label);
+  cursor.classList.toggle("is-small", !label && !!btn);
+  cursor.classList.toggle("on-dark", !!dark);
+  cursor.classList.toggle("is-hidden", !!field || !!dlg.open);
+}
+
+/* ---------- settings dialog ---------- */
+const dlg = $("#settings");
+let pendingInput = null;
+function openSettings() {
+  $("#apiKey").value = settings.key;
+  $("#model").value = settings.model;
+  dlg.showModal();
+  cursor.classList.add("is-hidden");
+  $("#apiKey").focus();
+}
+$("#settingsBtn").addEventListener("click", openSettings);
+$("#modelBtn").addEventListener("click", openSettings);
+dlg.addEventListener("close", () => {
+  cursor.classList.remove("is-hidden");
+  const p = pendingInput; pendingInput = null;
+  if (dlg.returnValue === "save") {
+    store.set("va_key", $("#apiKey").value.trim());
+    store.set("va_model", $("#model").value);
+    renderKeyState();
+    if (p && settings.key) run(p);
+  }
+});
+
+/* ---------- input: drop, click, paste ---------- */
+const dz = $("#dropzone");
+const fileInput = $("#fileInput");
+dz.addEventListener("click", () => { if (!busy) fileInput.click(); });
+dz.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && !busy) { e.preventDefault(); fileInput.click(); } });
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); fileInput.value = ""; });
+let dragDepth = 0;
+document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; if (!busy && !app.classList.contains("is-done")) dz.classList.add("is-over"); });
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; dz.classList.remove("is-over"); } });
+document.addEventListener("drop", (e) => {
+  e.preventDefault(); dragDepth = 0; dz.classList.remove("is-over");
+  const f = e.dataTransfer?.files?.[0];
+  if (!f || busy) return;
+  if (app.classList.contains("is-done")) resetView();
+  handleFile(f);
+});
+document.addEventListener("paste", (e) => {
+  if (busy || e.target === $("#extraInfo") || dlg.open) return;
+  const f = e.clipboardData?.files?.[0];
+  if (f) { e.preventDefault(); if (app.classList.contains("is-done")) resetView(); return handleFile(f); }
+  const text = e.clipboardData?.getData("text/plain")?.trim();
+  if (text && text.length > 20) {
+    e.preventDefault();
+    if (app.classList.contains("is-done")) resetView();
+    run({ kind: "text", name: "Liitetty teksti", text });
+  }
+});
+
+function readAsBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(",")[1]);
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(file);
+  });
+}
+async function handleFile(file) {
+  hideError();
+  if (file.size > 30 * 1024 * 1024) return showError("Tiedosto on liian suuri (yli 30 Mt).");
+  const type = file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "");
+  if (type === "application/pdf") return run({ kind: "pdf", name: file.name, data: await readAsBase64(file) });
+  if (["image/png", "image/jpeg", "image/webp", "image/gif"].includes(type)) return run({ kind: "image", name: file.name, mime: type, data: await readAsBase64(file) });
+  if (type.startsWith("text/") || /\.(txt|csv)$/i.test(file.name)) return run({ kind: "text", name: file.name, text: await file.text() });
+  showError("Tätä tiedostomuotoa ei tueta. Käytä PDF:ää, kuvaa tai tekstiä.");
+}
+
+/* ---------- loading UI ---------- */
+let busy = false, timer = null;
+function setStep(name) {
+  const order = ["read", "think", "write", "done"];
+  const idx = order.indexOf(name);
+  document.querySelectorAll("#steps li").forEach((li, i) => {
+    li.classList.toggle("done", i < idx);
+    li.classList.toggle("active", i === idx);
+  });
+}
+function startLoading(name) {
+  busy = true;
+  $("#fileName").textContent = name;
+  app.classList.add("is-loading"); body.classList.add("is-loading");
+  setStep("read");
+  const t0 = Date.now();
+  $("#elapsed").textContent = "0 s";
+  timer = setInterval(() => { $("#elapsed").textContent = Math.round((Date.now() - t0) / 1000) + " s"; }, 500);
+}
+function stopLoading() {
+  busy = false;
+  clearInterval(timer);
+  app.classList.remove("is-loading"); body.classList.remove("is-loading");
+}
+function showError(msg) { const el = $("#error"); el.textContent = msg; el.classList.add("show"); }
+function hideError() { $("#error").classList.remove("show"); }
+
+/* ---------- Claude call ---------- */
+function buildContent(input) {
+  const extra = $("#extraInfo").value.trim();
+  const parts = [];
+  if (input.kind === "pdf") parts.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: input.data } });
+  if (input.kind === "image") parts.push({ type: "image", source: { type: "base64", media_type: input.mime, data: input.data } });
+  let text = input.kind === "text" ? "Varustetiedot:\n\n" + input.text : "Varustetiedot ovat liitteessä.";
+  text += extra ? "\n\nMyyjän antamat lisätiedot autosta: " + extra : "\n\nMyyjä ei antanut lisätietoja auton historiasta.";
+  parts.push({ type: "text", text });
+  return parts;
+}
+
+async function callClaude(input) {
+  const client = new Anthropic({ apiKey: settings.key, dangerouslyAllowBrowser: true });
+  const stream = client.beta.messages.stream({
+    model: settings.model,
+    max_tokens: 32000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    thinking: { type: "adaptive" },
+    output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA } },
+    system: SYSTEM,
+    messages: [{ role: "user", content: buildContent(input) }],
+  });
+  const thinkTimer = setTimeout(() => busy && setStep("think"), 1500);
+  stream.on("text", () => { clearTimeout(thinkTimer); setStep("write"); });
+  const msg = await stream.finalMessage();
+  clearTimeout(thinkTimer);
+  if (msg.stop_reason === "refusal") throw new Error("Malli kieltäytyi käsittelemästä tätä aineistoa. Kokeile toista tiedostoa.");
+  if (msg.stop_reason === "max_tokens") throw new Error("Vastaus katkesi kesken. Kokeile pienempää aineistoa.");
+  const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  try { return JSON.parse(text); } catch { throw new Error("Vastausta ei saatu luettua. Yritä uudelleen."); }
+}
+
+function friendlyError(err) {
+  if (err instanceof Anthropic.AuthenticationError) return "API-avain ei kelpaa. Tarkista se asetuksista.";
+  if (err instanceof Anthropic.PermissionDeniedError) return "Avaimella ei ole oikeutta tähän malliin. Vaihda malli asetuksista.";
+  if (err instanceof Anthropic.RateLimitError) return "Liikaa pyyntöjä juuri nyt. Odota hetki ja yritä uudelleen.";
+  if (err instanceof Anthropic.BadRequestError) {
+    const m = err.message || "";
+    if (/credit|balance/i.test(m)) return "API-tilin saldo on loppu. Lisää krediittejä osoitteessa console.anthropic.com.";
+    return "Pyyntö hylättiin: " + m;
+  }
+  if (err instanceof Anthropic.InternalServerError) return "Anthropicin palvelu ei vastannut. Yritä hetken päästä uudelleen.";
+  if (err instanceof Anthropic.APIConnectionError) return "Yhteys Anthropiciin epäonnistui. Tarkista nettiyhteys.";
+  return err?.message || "Tuntematon virhe.";
+}
+
+async function run(input) {
+  hideError();
+  if (!settings.key) { pendingInput = input; openSettings(); return; }
+  startLoading(input.name);
+  try {
+    const data = await callClaude(input);
+    setStep("done");
+    if (!data.autot?.length) { stopLoading(); return showError(data.virhe || "Aineistosta ei löytynyt varustetietoja."); }
+    await new Promise((r) => setTimeout(r, 450));
+    showResults(data.autot);
+  } catch (err) {
+    stopLoading();
+    showError(friendlyError(err));
+  }
+}
+
+/* ---------- USP: hard 200-char guard ---------- */
+function fitUsp(usp) {
+  const s = (usp || "").trim();
+  if (s.length <= USP_MAX) return { text: s, trimmed: false };
+  const inner = s.replace(/^\*\*\s*/, "").replace(/\s*\*\*$/, "").split(" / ");
+  while (inner.length > 1 && ("** " + inner.join(" / ") + " **").length > USP_MAX) inner.pop();
+  return { text: "** " + inner.join(" / ") + " **", trimmed: true };
+}
+
+/* ---------- results ---------- */
+let cars = [], current = 0;
+function withTransition(fn) {
+  if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(fn);
+  else fn();
+}
+function showResults(list) {
+  cars = list.map((c) => ({ ...c, uspFit: fitUsp(c.usp) }));
+  withTransition(() => {
+    stopLoading();
+    app.classList.add("is-done"); body.classList.add("is-done");
+    renderTabs(0);
+    renderCar(0);
+    scrollTo({ top: 0 });
+  });
+}
+
+function renderTabs(active) {
+  const tabs = $("#tabs");
+  tabs.innerHTML = "";
+  if (cars.length < 2) return;
+  cars.forEach((c, i) => {
+    const b = el("button", { class: "tab", type: "button", role: "tab", "aria-selected": String(i === active) }, c.nimi || `Auto ${i + 1}`);
+    b.onclick = () => { renderTabs(i); renderCar(i); };
+    tabs.append(b);
+  });
+}
+
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === "class" ? (n.className = v) : n.setAttribute(k, v);
+  for (const k of kids) if (k != null) n.append(k);
+  return n;
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = el("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  }
+}
+function flashCopied(b, span, label) {
+  b.classList.add("copied"); span.textContent = "Kopioitu";
+  clearTimeout(b._t);
+  b._t = setTimeout(() => { b.classList.remove("copied"); span.textContent = label; }, 1800);
+}
+function copyBtn(getText, cls = "pill", label = "Kopioi") {
+  const b = el("button", { class: cls, type: "button" });
+  b.innerHTML = $("#copyIcons").innerHTML;
+  const span = el("span", {}, label);
+  b.append(span);
+  b.onclick = async () => { await copyText(getText()); flashCopied(b, span, label); };
+  return b;
+}
+
+function renderCar(i) {
+  current = i;
+  const c = cars[i];
+  $("#carName").textContent = (c.nimi || "Auto").toLowerCase();
+  const grid = $("#grid");
+  grid.innerHTML = "";
+
+  const items = el("ul", { class: "items" });
+  c.varusteet.forEach((v, n) => items.append(el("li", { style: `--i:${n}` }, v)));
+  const listCard = el("article", { class: "card list-card" },
+    el("div", { class: "card-head" },
+      el("div", { class: "card-title" }, "Varustelista", el("b", {}, String(c.varusteet.length))),
+      copyBtn(() => c.varusteet.join("\n"))),
+    items);
+
+  const len = c.uspFit.text.length;
+  const fill = el("div", { class: "meter-fill" + (len < 120 ? " low" : "") });
+  const uspCard = el("article", { class: "card usp-card" },
+    el("div", { class: "card-head" },
+      el("div", { class: "card-title" }, "Myyntiväittämä"),
+      copyBtn(() => c.uspFit.text, "pill light")),
+    el("div", { class: "usp-text" }, c.uspFit.text),
+    el("div", { class: "meter" },
+      el("div", { class: "meter-row" },
+        el("span", {}, c.uspFit.trimmed ? "Lyhennetty mahtumaan kenttään" : len < 120 ? "Kenttään mahtuisi vielä lisää" : "Mahtuu kenttään"),
+        el("span", {}, el("b", {}, String(len)), ` / ${USP_MAX}`)),
+      el("div", { class: "meter-track" }, fill)));
+  requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = Math.min(100, (len / USP_MAX) * 100) + "%"; }));
+
+  const st = c.suomi_auto?.tila || "Epäselvä";
+  const badgeCls = st === "Suomi-auto" ? "yes" : st === "Ei Suomi-auto" ? "no" : "unk";
+  const notes = el("div", { class: "notes" },
+    el("div", { class: "note" }, el("h3", {}, "Suomi-auto"), el("span", { class: "badge " + badgeCls }, st), el("p", {}, c.suomi_auto?.perustelu || "")));
+  const addList = (title, arr) => {
+    if (!arr?.length) return;
+    notes.append(el("div", { class: "note" }, el("h3", {}, title), el("ul", {}, ...arr.map((x) => el("li", {}, x)))));
+  };
+  addList("Lisää itse jos pätee", c.lisaa_itse);
+  addList("Epäselvät", c.epaselvat);
+  addList("Huomioita", c.huomautukset);
+  const notesCard = el("article", { class: "card notes-card" },
+    el("div", { class: "card-head" }, el("div", { class: "card-title" }, "Tarkista ennen julkaisua")), notes);
+
+  grid.append(listCard, el("div", { class: "side" }, uspCard, notesCard));
+}
+
+$("#copyAllBtn").addEventListener("click", async (e) => {
+  const c = cars[current]; if (!c) return;
+  await copyText(c.varusteet.join("\n") + "\n\n" + c.uspFit.text);
+  const b = e.currentTarget; const old = b.textContent;
+  b.textContent = "Kopioitu"; b.classList.add("copied");
+  setTimeout(() => { b.textContent = old; b.classList.remove("copied"); }, 1800);
+});
+
+function resetView() {
+  app.classList.remove("is-done"); body.classList.remove("is-done");
+  cars = [];
+  $("#grid").innerHTML = "";
+  $("#extraInfo").value = "";
+}
+$("#resetBtn").addEventListener("click", () => withTransition(resetView));
+</script>
+</body>
+</html>
