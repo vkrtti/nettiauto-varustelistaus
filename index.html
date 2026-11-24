@@ -323,6 +323,15 @@ body.flash .tile { animation: nudge .55s var(--ease); }
 .error { color: var(--ink-2); }
 .error strong { display: block; color: var(--danger); font-weight: 600; font-size: 15px; letter-spacing: -.01em; margin-bottom: 3px; }
 .error span { display: block; }
+
+/* ---------- mallitarkenne card ---------- */
+.mt-card { animation: slide-in .8s var(--ease) both .28s; }
+.mt-text { padding: 2px 22px 0; font-size: 17px; line-height: 1.4; font-weight: 500; letter-spacing: -.015em; word-break: break-word; }
+.mt-card .meter-row { color: var(--ink-3); }
+.mt-card .meter-row b { color: var(--ink); }
+.mt-card .meter-track { background: var(--line); }
+.mt-card .meter-fill { background: var(--ink); }
+.notes-card { animation-delay: .42s; }
 </style>
 </head>
 <body>
@@ -841,6 +850,15 @@ function fitUsp(usp) {
   return { text: "** " + inner.join(" / ") + " **", trimmed: true };
 }
 
+/* ---------- Mallitarkenne: equipment part only, max 70 chars ---------- */
+const MT_MAX = 70;
+function fitMt(usp) {
+  const items = (usp || "").trim().replace(/^\*\*\s*/, "").replace(/\s*\*\*$/, "").split(" / ").map((s) => s.trim()).filter(Boolean);
+  const out = [];
+  for (const it of items) if (("** " + [...out, it].join(" / ") + " **").length <= MT_MAX) out.push(it);
+  return { text: out.length ? "** " + out.join(" / ") + " **" : "" };
+}
+
 /* ---------- results ---------- */
 let cars = [], current = 0;
 function withTransition(fn) {
@@ -848,7 +866,7 @@ function withTransition(fn) {
   else fn();
 }
 function showResults(list) {
-  cars = list.map((c) => ({ ...c, uspFit: fitUsp(c.usp) }));
+  cars = list.map((c) => { const uspFit = fitUsp(c.usp); return { ...c, uspFit, mt: fitMt(uspFit.text) }; });
   withTransition(() => {
     stopLoading();
     app.classList.add("is-done"); body.classList.add("is-done");
@@ -925,6 +943,20 @@ function renderCar(i) {
       el("div", { class: "meter-track" }, fill)));
   requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = Math.min(100, (len / USP_MAX) * 100) + "%"; }));
 
+  const mtLen = c.mt.text.length;
+  const mtFill = el("div", { class: "meter-fill" });
+  const mtCard = el("article", { class: "card mt-card" },
+    el("div", { class: "card-head" },
+      el("div", { class: "card-title" }, "Mallitarkenne"),
+      copyBtn(() => c.mt.text)),
+    el("div", { class: "mt-text" }, c.mt.text),
+    el("div", { class: "meter" },
+      el("div", { class: "meter-row" },
+        el("span", {}, "Liitä Trafin automallin perään"),
+        el("span", {}, el("b", {}, String(mtLen)), ` / ${MT_MAX}`)),
+      el("div", { class: "meter-track" }, mtFill)));
+  requestAnimationFrame(() => requestAnimationFrame(() => { mtFill.style.width = Math.min(100, (mtLen / MT_MAX) * 100) + "%"; }));
+
   const st = c.suomi_auto?.tila || "Epäselvä";
   const badgeCls = st === "Suomi-auto" ? "yes" : st === "Ei Suomi-auto" ? "no" : "unk";
   const notes = el("div", { class: "notes" },
@@ -939,12 +971,12 @@ function renderCar(i) {
   const notesCard = el("article", { class: "card notes-card" },
     el("div", { class: "card-head" }, el("div", { class: "card-title" }, "Tarkista ennen julkaisua")), notes);
 
-  grid.append(listCard, el("div", { class: "side" }, uspCard, notesCard));
+  grid.append(listCard, el("div", { class: "side" }, uspCard, mtCard, notesCard));
 }
 
 $("#copyAllBtn").addEventListener("click", async (e) => {
   const c = cars[current]; if (!c) return;
-  await copyText(c.varusteet.join("\n") + "\n\n" + c.uspFit.text);
+  await copyText(c.varusteet.join("\n") + "\n\n" + c.uspFit.text + "\n\n" + c.mt.text);
   const b = e.currentTarget; const old = b.textContent;
   b.textContent = "Kopioitu"; b.classList.add("copied");
   setTimeout(() => { b.textContent = old; b.classList.remove("copied"); }, 1800);
